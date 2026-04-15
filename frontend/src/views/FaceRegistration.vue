@@ -46,6 +46,7 @@
 <script setup lang="ts">
 import { ref, reactive, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
+import axios from 'axios'
 
 // 摄像头与画布引用
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -97,32 +98,41 @@ const stopCamera = () => {
 }
 
 // 抓拍并模拟提交
-const captureAndSubmit = () => {
+// 👉 注意这里加了 async
+const captureAndSubmit = async () => {
   if (!studentForm.studentId || !studentForm.name) {
     ElMessage.warning('请先填写学号和姓名！')
     return
   }
-  
+
   const video = videoRef.value
   const canvas = canvasRef.value
   if (video && canvas) {
-    // 将视频当前帧画到 canvas 上
     canvas.width = video.videoWidth
     canvas.height = video.videoHeight
     const ctx = canvas.getContext('2d')
     ctx?.drawImage(video, 0, 0, canvas.width, canvas.height)
-    
-    // 将 canvas 转化为 base64 图片格式
+
     capturedImage.value = canvas.toDataURL('image/jpeg', 0.9)
-    
-    // TODO: 这里未来会用 Axios 把数据发给 FastAPI 后端
-    console.log('提交的数据：', {
-      studentId: studentForm.studentId,
-      name: studentForm.name,
-      imageFeature: 'Base64Image...' // 这里省略长字符串
-    })
-    
-    ElMessage.success(`✅ 抓拍成功！准备提取 ${studentForm.name} 的特征向量。`)
+
+    try {
+      ElMessage.info('正在向后端发送特征数据...')
+
+      // 👉 发送真实的 POST 请求给后端
+      const response = await axios.post('/api/v1/faces/register', {
+        student_id: studentForm.studentId,
+        name: studentForm.name,
+        image_base64: capturedImage.value
+      })
+
+      // 如果后端成功返回了数据
+      if (response.data.status === 'success') {
+        ElMessage.success(`✅ 成功！后端回复：${response.data.message}`)
+      }
+    } catch (error) {
+      console.error('请求报错:', error)
+      ElMessage.error('❌ 发送失败，请检查后端是否启动！')
+    }
   }
 }
 
