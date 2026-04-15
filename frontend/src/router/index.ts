@@ -1,10 +1,21 @@
 // src/router/index.ts
 import { createRouter, createWebHistory } from 'vue-router'
+import Dashboard from '../views/Dashboard.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
-    // 我们的骨架还没写具体的页面，所以这里先留空
+    {
+      path: '/',
+      name: 'Dashboard',
+      component: Dashboard
+    },
+    {
+      path: '/register',
+      name: 'FaceRegister',
+      // 懒加载模式：只有点进这个页面才会加载摄像头相关代码
+      component: () => import('../views/FaceRegistration.vue')
+    }
   ]
 })
 

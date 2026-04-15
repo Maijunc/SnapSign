@@ -4,24 +4,19 @@
       <div class="logo">
         <span class="logo-text">SnapSign 考勤系统</span>
       </div>
-      
-      <el-menu 
-        default-active="1" 
-        class="el-menu-vertical" 
-        background-color="#304156" 
-        text-color="#bfcbd9" 
-        active-text-color="#409eff"
-      >
-        <el-menu-item index="1">
-          <el-icon><Monitor /></el-icon>
+
+      <el-menu router :default-active="$route.path" class="el-menu-vertical" background-color="#304156"
+        text-color="#bfcbd9" active-text-color="#409eff">
+        <el-menu-item index="/">
+          <el-icon>
+            <Monitor />
+          </el-icon>
           <span>考勤数据大屏</span>
         </el-menu-item>
-        <el-menu-item index="2">
-          <el-icon><User /></el-icon>
-          <span>学生档案管理</span>
-        </el-menu-item>
-        <el-menu-item index="3">
-          <el-icon><Camera /></el-icon>
+        <el-menu-item index="/register">
+          <el-icon>
+            <Camera />
+          </el-icon>
           <span>人脸特征录入</span>
         </el-menu-item>
       </el-menu>
@@ -39,7 +34,7 @@
       </el-header>
 
       <el-main class="main-content">
-        <Dashboard />
+        <router-view></router-view>
       </el-main>
     </el-container>
   </el-container>
@@ -48,12 +43,13 @@
 <script setup lang="ts">
 // 引入图标
 import { Monitor, User, Camera } from '@element-plus/icons-vue'
-import Dashboard from './views/Dashboard.vue'
 </script>
 
 <style>
 /* 清除浏览器默认边距，让后台全屏铺满 */
-html, body, #app {
+html,
+body,
+#app {
   margin: 0;
   padding: 0;
   height: 100vh;
@@ -100,7 +96,7 @@ html, body, #app {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 1px 4px rgba(0,21,41,.08);
+  box-shadow: 0 1px 4px rgba(0, 21, 41, .08);
   padding: 0 20px;
   z-index: 9;
 }
