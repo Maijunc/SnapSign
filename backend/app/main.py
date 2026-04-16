@@ -125,7 +125,104 @@ async def register_face(data: FaceRegisterRequest, db: Session = Depends(get_db)
         print("❌ 后端发生错误:", str(e))
         raise HTTPException(status_code=500, detail="服务器特征提取失败，请检查控制台日志。")
 
-# ... (这里保留你之前写的 CORS 配置和 ping 接口) ...
+# 考勤打卡的数据模型
+class FaceCheckRequest(BaseModel):
+    image_base64: str
+
+# ==========================================
+# 4. 核心 API：考勤打卡与人脸比对 (记忆检索)
+# ==========================================
+@app.post("/api/v1/faces/check_in")
+async def check_in_face(data: FaceCheckRequest, db: Session = Depends(get_db)):
+    try:
+        # 步骤 A：图片解码与当前人脸特征提取
+        encoded_data = data.image_base64.split(",")[1] if "," in data.image_base64 else data.image_base64
+        img_data = base64.b64decode(encoded_data)
+        nparr = np.frombuffer(img_data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+        face_locations = face_recognition.face_locations(rgb_img)
+        if not face_locations:
+            raise HTTPException(status_code=400, detail="未检测到人脸，请正对摄像头！")
+        
+        # 提取当前站在屏幕前的人的 128维特征
+        unknown_encoding = face_recognition.face_encodings(rgb_img, face_locations)[0]
+
+        # 步骤 B：从数据库拉取所有已注册的【记忆】
+        all_students = db.query(StudentFeature).all()
+        if not all_students:
+            raise HTTPException(status_code=400, detail="系统未录入任何学生档案！")
+
+        # 将数据库里的 BLOB 还原成 numpy 数组 (注意：恢复为 float64 类型)
+        known_encodings = [np.frombuffer(student.face_encoding, dtype=np.float64) for student in all_students]
+
+        # 步骤 C：核心算法 - 计算欧氏距离 (距离越小越像)
+        distances = face_recognition.face_distance(known_encodings, unknown_encoding)
+        
+        # 找到距离最小的那个人的索引
+        best_match_index = np.argmin(distances)
+        min_distance = distances[best_match_index]
+
+        # 步骤 D：判定阈值 (通常 0.4~0.45 为严格匹配)
+        THRESHOLD = 0.45
+        if min_distance <= THRESHOLD:
+            matched_student = all_students[best_match_index]
+            print(f"✅ 考勤成功！识别为: {matched_student.name} (差异度: {min_distance:.3f})")
+            return {
+                "status": "success",
+                "message": f"签到成功！欢迎你，{matched_student.name}",
+                "student_name": matched_student.name,
+                "distance": float(min_distance)
+            }
+        else:
+            print(f"❌ 考勤失败！最小差异度: {min_distance:.3f}。陌生人拦截机制已触发。")
+            return {
+                "status": "fail",
+                "message": "未匹配到档案，请确认是否已录入人脸！"
+            }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print("❌ 考勤接口报错:", str(e))
+        raise HTTPException(status_code=500, detail="服务器比对失败。")
+    
+# ==========================================
+# 5. 查询所有已录入的学生档案 (不返回庞大的特征向量)
+# ==========================================
+@app.get("/api/v1/students")
+async def get_all_students(db: Session = Depends(get_db)):
+    try:
+        # 查询数据库中所有的学生，但排除了 face_encoding 这个二进制大文件
+        students = db.query(StudentFeature.id, StudentFeature.student_id, StudentFeature.name).all()
+        # 组装成 JSON 列表返回给前端
+        result = [{"id": s.id, "student_id": s.student_id, "name": s.name} for s in students]
+        return {"status": "success", "data": result}
+    except Exception as e:
+        print("❌ 查询学生列表失败:", str(e))
+        raise HTTPException(status_code=500, detail="查询数据库失败")
+
+# ==========================================、
+# 6. 删除指定学生的档案
+# ==========================================
+@app.delete("/api/v1/students/{student_id}")
+async def delete_student(student_id: str, db: Session = Depends(get_db)):
+    try:
+        student = db.query(StudentFeature).filter(StudentFeature.student_id == student_id).first()
+        if not student:
+            raise HTTPException(status_code=404, detail="未找到该学生档案")
+        
+        # 从数据库中硬删除
+        db.delete(student)
+        db.commit()
+        print(f"🗑️ 成功删除学生档案: {student.name} ({student_id})")
+        return {"status": "success", "message": f"成功删除 {student.name} 的档案"}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print("❌ 删除学生失败:", str(e))
+        raise HTTPException(status_code=500, detail="删除数据库记录失败")
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)

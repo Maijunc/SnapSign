@@ -15,6 +15,16 @@ const router = createRouter({
       name: 'FaceRegister',
       // 懒加载模式：只有点进这个页面才会加载摄像头相关代码
       component: () => import('../views/FaceRegistration.vue')
+    },
+    {
+      path: '/check_in',
+      name: 'AttendanceCheck',
+      component: () => import('../views/AttendanceCheck.vue')
+    },
+    {
+      path: '/management',
+      name: 'StudentManagement',
+      component: () => import('../views/StudentManagement.vue')
     }
   ]
 })

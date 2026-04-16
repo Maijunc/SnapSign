@@ -19,6 +19,18 @@
           </el-icon>
           <span>人脸特征录入</span>
         </el-menu-item>
+        <el-menu-item index="/management">
+          <el-icon>
+            <User />
+          </el-icon>
+          <span>学生档案管理</span>
+        </el-menu-item>
+        <el-menu-item index="/check_in">
+          <el-icon>
+            <Check />
+          </el-icon>
+          <span>课堂考勤打卡</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -42,7 +54,7 @@
 
 <script setup lang="ts">
 // 引入图标
-import { Monitor, User, Camera } from '@element-plus/icons-vue'
+import { Monitor, User, Camera, Check } from '@element-plus/icons-vue'
 </script>
 
 <style>
