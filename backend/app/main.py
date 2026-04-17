@@ -1,54 +1,85 @@
 # backend/app/main.py
-import base64
-import numpy as np
-import cv2
-import face_recognition
+# SnapSign 后端入口：只负责组装，不写业务逻辑
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel # 👉 导入 BaseModel 用于接收 JSON
-from sqlalchemy import create_engine, Column, Integer, String, LargeBinary
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
 import uvicorn
 
+from datetime import time
 
-# 引入数据库引擎和基类
-from app.db.session import engine, Base
-# 务必在这里导入你的模型文件，否则 SQLAlchemy 不知道有哪些表需要创建
-from app.models import domain 
+from app.database import engine, Base, SessionLocal
+from app.routers import faces, admin, auth, courses
+from app.models import User, Class, Course, CourseSchedule
+from app.auth import hash_password
+
+# 导入 models 模块，确保 SQLAlchemy 感知到所有表定义
+import app.models  # noqa: F401
 
 # ==========================================
-# 1. 数据库配置 (记忆中枢)
+# 启动时自动建表
 # ==========================================
-# 为了快速跑通，这里先用本地的 snapsign.db 数据库文件
-SQLALCHEMY_DATABASE_URL = "sqlite:///./snapsign.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-# 定义学生特征表
-class StudentFeature(Base):
-    __tablename__ = "student_features"
-    id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(String, unique=True, index=True)
-    name = Column(String)
-    face_encoding = Column(LargeBinary) # 重点：将 128 维向量存为 BLOB 二进制格式
-
-# 启动时自动在本地创建这个数据库表
 Base.metadata.create_all(bind=engine)
 
-# 获取数据库会话的依赖函数
-def get_db():
+# ==========================================
+# 创建默认种子账号（首次运行时写入）
+# ==========================================
+def _seed_default_users():
     db = SessionLocal()
     try:
-        yield db
+        if not db.query(User).filter(User.username == "admin").first():
+            db.add(User(username="admin", hashed_password=hash_password("admin123"), real_name="系统管理员", role="admin"))
+        if not db.query(User).filter(User.username == "teacher01").first():
+            db.add(User(username="teacher01", hashed_password=hash_password("teacher123"), real_name="张老师", role="teacher"))
+        if not db.query(User).filter(User.username == "student01").first():
+            db.add(User(username="student01", hashed_password=hash_password("student123"), real_name="李同学", role="student"))
+        db.commit()
     finally:
         db.close()
 
-# ==========================================
-# 2. FastAPI 应用初始化
-# ==========================================
 
+def _seed_course_data():
+    """首次运行时创建示例班级、课程和排课"""
+    db = SessionLocal()
+    try:
+        # 跳过：如果已有班级数据则不再重复插入
+        if db.query(Class).first():
+            return
+
+        # 创建示例班级
+        c1 = Class(name="计科2301班")
+        c2 = Class(name="计科2302班")
+        db.add_all([c1, c2])
+        db.flush()  # 拿到 id
+
+        # 查出教师（种子用户 teacher01）
+        teacher = db.query(User).filter(User.username == "teacher01").first()
+        if not teacher:
+            return
+
+        # 创建示例课程并关联班级
+        course1 = Course(name="高等数学", teacher_id=teacher.id, classes=[c1, c2])
+        course2 = Course(name="Python程序设计", teacher_id=teacher.id, classes=[c1])
+        db.add_all([course1, course2])
+        db.flush()
+
+        # 创建示例排课
+        db.add_all([
+            CourseSchedule(course_id=course1.id, class_id=c1.id, weekday=1, start_time=time(8, 0), end_time=time(9, 40), location="教学楼A-301"),
+            CourseSchedule(course_id=course1.id, class_id=c2.id, weekday=3, start_time=time(10, 0), end_time=time(11, 40), location="教学楼A-302"),
+            CourseSchedule(course_id=course2.id, class_id=c1.id, weekday=2, start_time=time(14, 0), end_time=time(15, 40), location="实验楼B-201"),
+        ])
+        db.commit()
+        print("📚 种子课程数据已写入！")
+    finally:
+        db.close()
+
+
+_seed_default_users()
+_seed_course_data()
+
+# ==========================================
+# FastAPI 应用初始化
+# ==========================================
 app = FastAPI(title="SnapSign API")
 
 app.add_middleware(
@@ -58,171 +89,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-class FaceRegisterRequest(BaseModel):
-    student_id: str
-    name: str
-    image_base64: str
-
 
 # ==========================================
-# 3. 核心 API：人脸录入与特征提取 (视觉大脑)
+# 注册业务路由
 # ==========================================
-@app.post("/api/v1/faces/register")
-async def register_face(data: FaceRegisterRequest, db: Session = Depends(get_db)):
-    try:
-        # --- 步骤 A：图片解码 ---
-        # 剥离前端传过来的 "data:image/jpeg;base64," 前缀
-        encoded_data = data.image_base64.split(",")[1] if "," in data.image_base64 else data.image_base64
-        img_data = base64.b64decode(encoded_data)
-        
-        # 将二进制转化为 OpenCV 能看懂的 numpy 数组 (BGR格式)
-        nparr = np.frombuffer(img_data, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        # --- 步骤 B：特征提取 ---
-        # face_recognition 需要 RGB 格式，先做转换
-        rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        
-        # 寻找画面中的人脸位置
-        face_locations = face_recognition.face_locations(rgb_img)
-        if not face_locations:
-            raise HTTPException(status_code=400, detail="照片中未检测到人脸，请正对摄像头！")
-        if len(face_locations) > 1:
-            raise HTTPException(status_code=400, detail="检测到多张人脸，请确保画面中只有你一个人！")
-
-        # 提取 128 维人脸特征向量
-        face_encodings = face_recognition.face_encodings(rgb_img, face_locations)
-        feature_vector = face_encodings[0] # 获取第一个人脸的向量
-
-        # --- 步骤 C：数据持久化落地 ---
-        # 检查该学号是否已经录入过
-        existing_student = db.query(StudentFeature).filter(StudentFeature.student_id == data.student_id).first()
-        if existing_student:
-            raise HTTPException(status_code=400, detail="该学号已存在，请勿重复录入！")
-
-        # 将 numpy 数组序列化为字节流（二进制），存入数据库
-        feature_blob = feature_vector.tobytes()
-        
-        new_student = StudentFeature(
-            student_id=data.student_id,
-            name=data.name,
-            face_encoding=feature_blob
-        )
-        db.add(new_student)
-        db.commit()
-        db.refresh(new_student)
-
-        print(f"🎉 成功录入！{data.name} 的 128 维特征已序列化并存入数据库！")
-
-        return {
-            "status": "success", 
-            "message": f"成功提取 {data.name} 的面部特征并存入数据库！"
-        }
-
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        print("❌ 后端发生错误:", str(e))
-        raise HTTPException(status_code=500, detail="服务器特征提取失败，请检查控制台日志。")
-
-# 考勤打卡的数据模型
-class FaceCheckRequest(BaseModel):
-    image_base64: str
-
-# ==========================================
-# 4. 核心 API：考勤打卡与人脸比对 (记忆检索)
-# ==========================================
-@app.post("/api/v1/faces/check_in")
-async def check_in_face(data: FaceCheckRequest, db: Session = Depends(get_db)):
-    try:
-        # 步骤 A：图片解码与当前人脸特征提取
-        encoded_data = data.image_base64.split(",")[1] if "," in data.image_base64 else data.image_base64
-        img_data = base64.b64decode(encoded_data)
-        nparr = np.frombuffer(img_data, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        rgb_img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-        face_locations = face_recognition.face_locations(rgb_img)
-        if not face_locations:
-            raise HTTPException(status_code=400, detail="未检测到人脸，请正对摄像头！")
-        
-        # 提取当前站在屏幕前的人的 128维特征
-        unknown_encoding = face_recognition.face_encodings(rgb_img, face_locations)[0]
-
-        # 步骤 B：从数据库拉取所有已注册的【记忆】
-        all_students = db.query(StudentFeature).all()
-        if not all_students:
-            raise HTTPException(status_code=400, detail="系统未录入任何学生档案！")
-
-        # 将数据库里的 BLOB 还原成 numpy 数组 (注意：恢复为 float64 类型)
-        known_encodings = [np.frombuffer(student.face_encoding, dtype=np.float64) for student in all_students]
-
-        # 步骤 C：核心算法 - 计算欧氏距离 (距离越小越像)
-        distances = face_recognition.face_distance(known_encodings, unknown_encoding)
-        
-        # 找到距离最小的那个人的索引
-        best_match_index = np.argmin(distances)
-        min_distance = distances[best_match_index]
-
-        # 步骤 D：判定阈值 (通常 0.4~0.45 为严格匹配)
-        THRESHOLD = 0.45
-        if min_distance <= THRESHOLD:
-            matched_student = all_students[best_match_index]
-            print(f"✅ 考勤成功！识别为: {matched_student.name} (差异度: {min_distance:.3f})")
-            return {
-                "status": "success",
-                "message": f"签到成功！欢迎你，{matched_student.name}",
-                "student_name": matched_student.name,
-                "distance": float(min_distance)
-            }
-        else:
-            print(f"❌ 考勤失败！最小差异度: {min_distance:.3f}。陌生人拦截机制已触发。")
-            return {
-                "status": "fail",
-                "message": "未匹配到档案，请确认是否已录入人脸！"
-            }
-
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        print("❌ 考勤接口报错:", str(e))
-        raise HTTPException(status_code=500, detail="服务器比对失败。")
-    
-# ==========================================
-# 5. 查询所有已录入的学生档案 (不返回庞大的特征向量)
-# ==========================================
-@app.get("/api/v1/students")
-async def get_all_students(db: Session = Depends(get_db)):
-    try:
-        # 查询数据库中所有的学生，但排除了 face_encoding 这个二进制大文件
-        students = db.query(StudentFeature.id, StudentFeature.student_id, StudentFeature.name).all()
-        # 组装成 JSON 列表返回给前端
-        result = [{"id": s.id, "student_id": s.student_id, "name": s.name} for s in students]
-        return {"status": "success", "data": result}
-    except Exception as e:
-        print("❌ 查询学生列表失败:", str(e))
-        raise HTTPException(status_code=500, detail="查询数据库失败")
-
-# ==========================================、
-# 6. 删除指定学生的档案
-# ==========================================
-@app.delete("/api/v1/students/{student_id}")
-async def delete_student(student_id: str, db: Session = Depends(get_db)):
-    try:
-        student = db.query(StudentFeature).filter(StudentFeature.student_id == student_id).first()
-        if not student:
-            raise HTTPException(status_code=404, detail="未找到该学生档案")
-        
-        # 从数据库中硬删除
-        db.delete(student)
-        db.commit()
-        print(f"🗑️ 成功删除学生档案: {student.name} ({student_id})")
-        return {"status": "success", "message": f"成功删除 {student.name} 的档案"}
-    except HTTPException as he:
-        raise he
-    except Exception as e:
-        print("❌ 删除学生失败:", str(e))
-        raise HTTPException(status_code=500, detail="删除数据库记录失败")
+app.include_router(auth.router)
+app.include_router(faces.router)
+app.include_router(admin.router)
+app.include_router(courses.router)
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)

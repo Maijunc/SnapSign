@@ -1,6 +1,18 @@
 <template>
   <div class="attendance-container">
-    <el-card shadow="hover" header="🕒 课堂自动打卡机" class="box-card">
+    <!-- 未携带 scheduleId 时的提示 -->
+    <el-card v-if="!scheduleId" shadow="hover" class="box-card" style="text-align: center;">
+      <el-empty description="请从「我的课程」页面选择一节课后，再开启打卡机">
+        <el-button type="primary" @click="$router.push('/courses')">前往我的课程</el-button>
+      </el-empty>
+    </el-card>
+
+    <!-- 正常打卡界面 -->
+    <el-card v-else shadow="hover" class="box-card">
+      <template #header>
+        <span>🕒 课堂自动打卡机 — {{ courseTitle }}</span>
+      </template>
+
       <div class="camera-box" v-loading="isChecking" element-loading-text="正在进行生物特征比对...">
         <video ref="videoRef" autoplay playsinline class="video-stream"></video>
         <canvas ref="canvasRef" style="display: none;"></canvas>
@@ -17,16 +29,21 @@
 
       <div v-if="resultMessage" :class="['result-box', resultStatus]">
         <h2>{{ resultMessage }}</h2>
-        <p v-if="matchDistance">算法差异度: {{ matchDistance.toFixed(3) }} (阈值 < 0.45)</p>
+        <p v-if="matchDistance">算法差异度: {{ matchDistance.toFixed(3) }} (阈值 &lt; 0.45)</p>
       </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onBeforeUnmount } from 'vue'
+import { ref, computed, onBeforeUnmount } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
+import request from '../utils/request'
+
+const route = useRoute()
+const scheduleId = computed(() => Number(route.query.scheduleId) || 0)
+const courseTitle = computed(() => (route.query.title as string) || '未知课程')
 
 const videoRef = ref<HTMLVideoElement | null>(null)
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -65,13 +82,21 @@ const checkIn = async () => {
   resultMessage.value = ''
   
   try {
-    const res = await axios.post('/api/v1/faces/check_in', { image_base64: base64Image })
+    const res = await request.post('/api/v1/faces/check_in', {
+      image_base64: base64Image,
+      schedule_id: scheduleId.value,
+    })
     
     if (res.data.status === 'success') {
       resultStatus.value = 'success'
       resultMessage.value = res.data.message
       matchDistance.value = res.data.distance
       ElMessage.success('✅ 签到成功！')
+    } else if (res.data.status === 'duplicate') {
+      resultStatus.value = 'success'
+      resultMessage.value = res.data.message
+      matchDistance.value = res.data.distance
+      ElMessage.warning('该同学已签到过')
     } else {
       resultStatus.value = 'fail'
       resultMessage.value = res.data.message

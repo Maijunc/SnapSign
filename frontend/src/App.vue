@@ -1,5 +1,9 @@
 <template>
-  <el-container class="layout-container">
+  <!-- 登录页：全屏渲染，不带侧边栏 -->
+  <router-view v-if="isLoginPage" />
+
+  <!-- 业务页面：带侧边栏+顶栏的后台布局 -->
+  <el-container v-else class="layout-container">
     <el-aside width="220px" class="sidebar">
       <div class="logo">
         <span class="logo-text">SnapSign 考勤系统</span>
@@ -18,6 +22,12 @@
             <Camera />
           </el-icon>
           <span>人脸特征录入</span>
+        </el-menu-item>
+        <el-menu-item index="/courses">
+          <el-icon>
+            <Notebook />
+          </el-icon>
+          <span>我的课程</span>
         </el-menu-item>
         <el-menu-item index="/management">
           <el-icon>
@@ -41,7 +51,8 @@
         </div>
         <div class="header-right">
           <el-avatar size="small" src="https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png" />
-          <span class="admin-name">管理员 (天骏)</span>
+          <span class="admin-name">{{ realName }} ({{ roleLabel }})</span>
+          <el-button type="danger" text size="small" style="margin-left: 12px" @click="handleLogout">退出</el-button>
         </div>
       </el-header>
 
@@ -53,8 +64,25 @@
 </template>
 
 <script setup lang="ts">
-// 引入图标
-import { Monitor, User, Camera, Check } from '@element-plus/icons-vue'
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { Monitor, User, Camera, Check, Notebook } from '@element-plus/icons-vue'
+
+const route = useRoute()
+const router = useRouter()
+
+const isLoginPage = computed(() => route.path === '/login')
+const realName = computed(() => localStorage.getItem('realName') || '未知用户')
+
+const roleMap: Record<string, string> = { admin: '管理员', teacher: '教师', student: '学生' }
+const roleLabel = computed(() => roleMap[localStorage.getItem('role') || ''] || '未知')
+
+const handleLogout = () => {
+  localStorage.removeItem('token')
+  localStorage.removeItem('role')
+  localStorage.removeItem('realName')
+  router.push('/login')
+}
 </script>
 
 <style>
