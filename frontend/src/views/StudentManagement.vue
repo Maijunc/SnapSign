@@ -45,7 +45,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
+import request from '../utils/request'
 
 // 响应式状态
 const studentList = ref([])
@@ -60,7 +60,7 @@ onMounted(() => {
 const fetchStudents = async () => {
   isLoading.value = true
   try {
-    const res = await axios.get('/api/v1/students')
+    const res = await request.get('/api/v1/students')
     if (res.data.status === 'success') {
       studentList.value = res.data.data
     }
@@ -75,7 +75,7 @@ const fetchStudents = async () => {
 // 删除指定学生
 const handleDelete = async (studentId: string) => {
   try {
-    const res = await axios.delete(`/api/v1/students/${studentId}`)
+    const res = await request.delete(`/api/v1/students/${studentId}`)
     if (res.data.status === 'success') {
       ElMessage.success(res.data.message)
       // 删除成功后，重新拉取最新列表

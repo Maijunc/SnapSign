@@ -11,35 +11,9 @@
 
       <el-menu router :default-active="$route.path" class="el-menu-vertical" background-color="#304156"
         text-color="#bfcbd9" active-text-color="#409eff">
-        <el-menu-item index="/">
-          <el-icon>
-            <Monitor />
-          </el-icon>
-          <span>考勤数据大屏</span>
-        </el-menu-item>
-        <el-menu-item index="/register">
-          <el-icon>
-            <Camera />
-          </el-icon>
-          <span>人脸特征录入</span>
-        </el-menu-item>
-        <el-menu-item index="/courses">
-          <el-icon>
-            <Notebook />
-          </el-icon>
-          <span>我的课程</span>
-        </el-menu-item>
-        <el-menu-item index="/management">
-          <el-icon>
-            <User />
-          </el-icon>
-          <span>学生档案管理</span>
-        </el-menu-item>
-        <el-menu-item index="/check_in">
-          <el-icon>
-            <Check />
-          </el-icon>
-          <span>课堂考勤打卡</span>
+        <el-menu-item v-for="item in menuItems" :key="item.path" :index="item.path">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ item.label }}</span>
         </el-menu-item>
       </el-menu>
     </el-aside>
@@ -64,18 +38,43 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Monitor, User, Camera, Check, Notebook } from '@element-plus/icons-vue'
+import { Monitor, User, Camera, Check, Notebook, List, Setting, Reading, Calendar } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
 
 const isLoginPage = computed(() => route.path === '/login')
-const realName = computed(() => localStorage.getItem('realName') || '未知用户')
+
+// 用 ref 存储身份信息，路由变化时自动刷新（解决切换账号不更新的问题）
+const realName = ref(localStorage.getItem('realName') || '未知用户')
+const currentRole = ref(localStorage.getItem('role') || '')
+
+watch(() => route.path, () => {
+  realName.value = localStorage.getItem('realName') || '未知用户'
+  currentRole.value = localStorage.getItem('role') || ''
+})
 
 const roleMap: Record<string, string> = { admin: '管理员', teacher: '教师', student: '学生' }
-const roleLabel = computed(() => roleMap[localStorage.getItem('role') || ''] || '未知')
+const roleLabel = computed(() => roleMap[currentRole.value] || '未知')
+
+// 全部菜单项定义，roles 标明哪些角色可见
+const allMenuItems = [
+  { path: '/',            label: '考勤数据大屏', icon: Monitor,  roles: ['admin', 'teacher'] },
+  { path: '/register',    label: '人脸特征录入', icon: Camera,   roles: ['student', 'teacher', 'admin'] },
+  { path: '/my-attendance', label: '我的考勤',   icon: List,     roles: ['student'] },
+  { path: '/calendar',    label: '教学日历',     icon: Calendar, roles: ['teacher', 'student'] },
+  { path: '/courses',     label: '我的课程',     icon: Notebook, roles: ['teacher'] },
+  { path: '/check_in',    label: '课堂考勤打卡', icon: Check,    roles: ['student', 'teacher'] },
+  { path: '/management',  label: '学生档案管理', icon: Reading,  roles: ['teacher', 'admin'] },
+  { path: '/users',       label: '用户管理',     icon: User,     roles: ['admin'] },
+  { path: '/course-admin', label: '课程管理',    icon: Setting,  roles: ['admin'] },
+]
+
+const menuItems = computed(() =>
+  allMenuItems.filter(item => item.roles.includes(currentRole.value))
+)
 
 const handleLogout = () => {
   localStorage.removeItem('token')

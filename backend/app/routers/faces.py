@@ -11,8 +11,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import StudentFeature, CourseSchedule, AttendanceRecord
+from app.models import StudentFeature, CourseSchedule, AttendanceRecord, User
 from app.schemas import FaceRegisterRequest, FaceCheckRequest
+from app.auth import get_current_user
 
 router = APIRouter(prefix="/api/v1/faces", tags=["人脸识别"])
 
@@ -21,7 +22,11 @@ router = APIRouter(prefix="/api/v1/faces", tags=["人脸识别"])
 # 人脸录入（视觉大脑）
 # ==========================================
 @router.post("/register")
-async def register_face(data: FaceRegisterRequest, db: Session = Depends(get_db)):
+async def register_face(
+    data: FaceRegisterRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
         # 步骤 A：图片解码
         encoded_data = data.image_base64.split(",")[1] if "," in data.image_base64 else data.image_base64
@@ -49,7 +54,8 @@ async def register_face(data: FaceRegisterRequest, db: Session = Depends(get_db)
         new_student = StudentFeature(
             student_id=data.student_id,
             name=data.name,
-            face_encoding=feature_blob
+            face_encoding=feature_blob,
+            user_id=current_user.id,
         )
         db.add(new_student)
         db.commit()

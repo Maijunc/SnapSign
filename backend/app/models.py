@@ -1,7 +1,7 @@
 # backend/app/models.py
 # 统一的 SQLAlchemy ORM 模型定义
 
-from sqlalchemy import Column, Integer, String, LargeBinary, ForeignKey, DateTime, Enum, Float, Table, Time
+from sqlalchemy import Column, Integer, String, LargeBinary, ForeignKey, DateTime, Enum, Float, Table, Time, Date
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -16,6 +16,17 @@ course_classes = Table(
     Base.metadata,
     Column("course_id", Integer, ForeignKey("courses.id"), primary_key=True),
     Column("class_id", Integer, ForeignKey("classes.id"), primary_key=True),
+)
+
+
+# ==========================================
+# 多对多中间表：班级 ↔ 学生（人脸特征）
+# ==========================================
+class_students = Table(
+    "class_students",
+    Base.metadata,
+    Column("class_id", Integer, ForeignKey("classes.id"), primary_key=True),
+    Column("student_feature_id", Integer, ForeignKey("student_features.id"), primary_key=True),
 )
 
 
@@ -58,6 +69,7 @@ class Class(Base):
 
     courses = relationship("Course", secondary=course_classes, back_populates="classes")
     schedules = relationship("CourseSchedule", back_populates="class_")
+    students = relationship("StudentFeature", secondary=class_students, back_populates="classes")
 
 
 # ==========================================
@@ -90,6 +102,8 @@ class CourseSchedule(Base):
     course_id = Column(Integer, ForeignKey("courses.id"), nullable=False, comment="关联课程")
     class_id = Column(Integer, ForeignKey("classes.id"), nullable=False, comment="关联班级")
     weekday = Column(Integer, nullable=False, comment="星期几 1=周一 ... 7=周日")
+    start_date = Column(Date, nullable=False, comment="首次上课日期")
+    total_weeks = Column(Integer, nullable=False, default=16, comment="持续周数")
     start_time = Column(Time, nullable=False, comment="上课时间")
     end_time = Column(Time, nullable=False, comment="下课时间")
     location = Column(String(100), comment="上课地点，如 教学楼A-301")
@@ -138,6 +152,23 @@ class StudentFeature(Base):
     student_id = Column(String(20), unique=True, index=True, comment="学号")
     name = Column(String(50), comment="姓名")
     face_encoding = Column(LargeBinary, comment="128维人脸特征向量(BLOB)")
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, comment="关联系统用户")
+
+    user = relationship("User")
+    classes = relationship("Class", secondary=class_students, back_populates="students")
+
+
+# ==========================================
+# 节假日表
+# ==========================================
+
+class Holiday(Base):
+    """节假日表（排课中标注放假日期）"""
+    __tablename__ = "holidays"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    holiday_date = Column(Date, unique=True, nullable=False, index=True, comment="放假日期")
+    name = Column(String(50), nullable=False, comment="节假日名称，如 国庆节")
 
 
 # ==========================================

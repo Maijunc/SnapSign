@@ -32,13 +32,22 @@
               <el-table-column label="星期" width="100">
                 <template #default="{ row }">{{ weekdayText(row.weekday) }}</template>
               </el-table-column>
+              <el-table-column label="首次上课" width="130">
+                <template #default="{ row }">{{ row.start_date || '-' }}</template>
+              </el-table-column>
+              <el-table-column label="周数" width="70" align="center">
+                <template #default="{ row }">{{ row.total_weeks ?? '-' }}</template>
+              </el-table-column>
               <el-table-column label="时间" width="180">
                 <template #default="{ row }">{{ row.start_time }} ~ {{ row.end_time }}</template>
               </el-table-column>
               <el-table-column prop="class_name" label="班级" width="150" />
               <el-table-column prop="location" label="教室" />
-              <el-table-column label="操作" width="200">
+              <el-table-column label="操作" width="280">
                 <template #default="{ row }">
+                  <el-button type="primary" size="small" @click="viewWeeks(row)">
+                    周次详情
+                  </el-button>
                   <el-button type="success" size="small" @click="goCheckIn(row)">
                     开启打卡
                   </el-button>
@@ -73,6 +82,22 @@
         </el-table-column>
       </el-table>
     </el-dialog>
+
+    <!-- 周次详情弹窗 -->
+    <el-dialog v-model="showWeeks" :title="`📅 周次详情 - ${weekScheduleTitle}`" width="500px">
+      <el-table :data="weeksList" stripe border v-loading="weeksLoading">
+        <el-table-column prop="week" label="周次" width="80" align="center">
+          <template #default="{ row }">第{{ row.week }}周</template>
+        </el-table-column>
+        <el-table-column prop="date" label="上课日期" width="140" />
+        <el-table-column label="状态">
+          <template #default="{ row }">
+            <el-tag v-if="row.is_holiday" type="danger" size="small">🎉 {{ row.holiday_name }}</el-tag>
+            <el-tag v-else type="success" size="small">正常上课</el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
@@ -95,6 +120,12 @@ const loadingSchedules = reactive<Record<number, boolean>>({})
 // 考勤弹窗
 const showAttendance = ref(false)
 const attendanceRecords = ref<any[]>([])
+
+// 周次弹窗
+const showWeeks = ref(false)
+const weeksList = ref<any[]>([])
+const weeksLoading = ref(false)
+const weekScheduleTitle = ref('')
 
 // 加载课程列表
 const fetchCourses = async () => {
@@ -119,6 +150,21 @@ watch(activeCourse, async (courseId) => {
     loadingSchedules[courseId] = false
   }
 })
+
+// 查看周次详情
+const viewWeeks = async (schedule: any) => {
+  weekScheduleTitle.value = `${schedule.course_name} - ${schedule.class_name}`
+  weeksLoading.value = true
+  showWeeks.value = true
+  try {
+    const res = await request.get(`/api/v1/schedules/${schedule.id}/weeks`)
+    weeksList.value = res.data
+  } catch {
+    ElMessage.error('获取周次详情失败')
+  } finally {
+    weeksLoading.value = false
+  }
+}
 
 // 跳转打卡页
 const goCheckIn = (schedule: any) => {

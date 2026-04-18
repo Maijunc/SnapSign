@@ -46,7 +46,7 @@
 <script setup lang="ts">
 import { ref, reactive, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
+import request from '../utils/request'
 
 // 摄像头与画布引用
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -119,7 +119,7 @@ const captureAndSubmit = async () => {
       ElMessage.info('正在向后端发送特征数据...')
 
       // 👉 发送真实的 POST 请求给后端
-      const response = await axios.post('/api/v1/faces/register', {
+      const response = await request.post('/api/v1/faces/register', {
         student_id: studentForm.studentId,
         name: studentForm.name,
         image_base64: capturedImage.value
