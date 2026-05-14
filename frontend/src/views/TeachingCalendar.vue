@@ -53,6 +53,21 @@
         </div>
       </div>
     </el-card>
+
+    <!-- 学生课程详情弹窗 -->
+    <el-dialog v-model="detailDialogVisible" title="课程详情" width="400px">
+      <template v-if="selectedEvent">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="课程名称">{{ selectedEvent.course_name }}</el-descriptions-item>
+          <el-descriptions-item label="班级">{{ selectedEvent.class_name }}</el-descriptions-item>
+          <el-descriptions-item label="上课时间">{{ selectedEvent.start_time }} - {{ selectedEvent.end_time }}</el-descriptions-item>
+          <el-descriptions-item label="上课地点">{{ selectedEvent.location || '未指定' }}</el-descriptions-item>
+        </el-descriptions>
+      </template>
+      <template #footer>
+        <el-button @click="detailDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -95,8 +110,6 @@ const weekdays = ['一', '二', '三', '四', '五', '六', '日']
 
 // 按日期索引事件 { "2026-04-20": [...events] }
 const eventsMap = ref<Record<string, CalendarEvent[]>>({})
-
-const role = localStorage.getItem('role') || ''
 
 async function fetchCalendar() {
   loading.value = true
@@ -179,12 +192,23 @@ function goToday() {
 
 function goToSchedule(ev: CalendarEvent) {
   if (ev.is_holiday) return
-  if (role === 'teacher') {
-    router.push('/courses')
-  } else if (role === 'student') {
-    router.push({ path: '/check_in', query: { schedule_id: ev.schedule_id } })
+  const role = localStorage.getItem('role') || ''
+  if (role === 'student') {
+    // 学生：弹窗展示课程详情
+    selectedEvent.value = ev
+    detailDialogVisible.value = true
+  } else {
+    // 教师/管理员：跳转打卡页
+    router.push({
+      path: '/check_in',
+      query: { scheduleId: ev.schedule_id, title: `${ev.course_name} - ${ev.class_name}` },
+    })
   }
 }
+
+// 学生课程详情弹窗
+const detailDialogVisible = ref(false)
+const selectedEvent = ref<CalendarEvent | null>(null)
 
 watch([year, month], () => fetchCalendar())
 onMounted(() => fetchCalendar())

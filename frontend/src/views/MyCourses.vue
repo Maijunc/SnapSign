@@ -1,69 +1,78 @@
 <template>
   <div class="my-courses-container">
+    <!-- ===== 今日课程快捷区 ===== -->
+    <el-card v-if="todaySchedules.length > 0" shadow="hover" style="margin-bottom: 20px;">
+      <template #header>
+        <div class="card-header">
+          <span>🕐 今日课程</span>
+          <el-tag type="info" size="small">{{ todayLabel }}</el-tag>
+        </div>
+      </template>
+      <div class="today-cards">
+        <el-card
+          v-for="s in todaySchedules"
+          :key="s.id"
+          shadow="hover"
+          class="today-card"
+        >
+          <div class="today-card-body">
+            <div class="today-card-info">
+              <div class="today-card-name">{{ s.course_name }}</div>
+              <div class="today-card-detail">
+                {{ s.class_name }} · {{ s.start_time }}~{{ s.end_time }} · {{ s.location || '无教室' }}
+              </div>
+            </div>
+            <div class="today-card-actions">
+              <el-button type="success" @click="goCheckIn(s)">开启打卡</el-button>
+              <el-button type="primary" plain @click="viewAttendance(s)">考勤记录</el-button>
+            </div>
+          </div>
+        </el-card>
+      </div>
+    </el-card>
+
+    <!-- ===== 全部排课总览 ===== -->
     <el-card shadow="hover">
       <template #header>
         <div class="card-header">
-          <span>📚 我的课程</span>
+          <span>📚 全部排课总览</span>
         </div>
       </template>
 
-      <el-empty v-if="courses.length === 0" description="暂无课程数据" />
+      <el-empty v-if="allSchedules.length === 0" description="暂无排课数据" />
 
-      <el-collapse v-else v-model="activeCourse" accordion>
-        <el-collapse-item
-          v-for="course in courses"
-          :key="course.id"
-          :name="course.id"
-        >
-          <template #title>
-            <div class="course-title">
-              <el-tag type="primary" size="small">{{ course.name }}</el-tag>
-              <span class="course-classes">
-                {{ course.classes.map((c: any) => c.name).join('、') || '未分配班级' }}
-              </span>
-            </div>
+      <el-table v-else :data="allSchedules" stripe style="width: 100%" :default-sort="{ prop: 'weekday', order: 'ascending' }">
+        <el-table-column prop="course_name" label="课程" min-width="120">
+          <template #default="{ row }">
+            <el-tag type="primary" size="small">{{ row.course_name }}</el-tag>
           </template>
-
-          <!-- 排课列表 -->
-          <div v-loading="loadingSchedules[course.id]">
-            <el-empty v-if="scheduleMap[course.id]?.length === 0" description="该课程暂无排课" :image-size="60" />
-
-            <el-table v-else :data="scheduleMap[course.id] || []" stripe style="width: 100%">
-              <el-table-column label="星期" width="100">
-                <template #default="{ row }">{{ weekdayText(row.weekday) }}</template>
-              </el-table-column>
-              <el-table-column label="首次上课" width="130">
-                <template #default="{ row }">{{ row.start_date || '-' }}</template>
-              </el-table-column>
-              <el-table-column label="周数" width="70" align="center">
-                <template #default="{ row }">{{ row.total_weeks ?? '-' }}</template>
-              </el-table-column>
-              <el-table-column label="时间" width="180">
-                <template #default="{ row }">{{ row.start_time }} ~ {{ row.end_time }}</template>
-              </el-table-column>
-              <el-table-column prop="class_name" label="班级" width="150" />
-              <el-table-column prop="location" label="教室" />
-              <el-table-column label="操作" width="280">
-                <template #default="{ row }">
-                  <el-button type="primary" size="small" @click="viewWeeks(row)">
-                    周次详情
-                  </el-button>
-                  <el-button type="success" size="small" @click="goCheckIn(row)">
-                    开启打卡
-                  </el-button>
-                  <el-button type="info" size="small" @click="viewAttendance(row)">
-                    考勤记录
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-        </el-collapse-item>
-      </el-collapse>
+        </el-table-column>
+        <el-table-column prop="class_name" label="班级" width="130" />
+        <el-table-column label="星期" width="80" prop="weekday" sortable>
+          <template #default="{ row }">{{ weekdayText(row.weekday) }}</template>
+        </el-table-column>
+        <el-table-column label="时间" width="140">
+          <template #default="{ row }">{{ row.start_time }} ~ {{ row.end_time }}</template>
+        </el-table-column>
+        <el-table-column prop="location" label="教室" width="130" />
+        <el-table-column label="首次上课" width="120">
+          <template #default="{ row }">{{ row.start_date || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="周数" width="70" align="center">
+          <template #default="{ row }">{{ row.total_weeks ?? '-' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="280" fixed="right">
+          <template #default="{ row }">
+            <el-button type="success" size="small" @click="goCheckIn(row)">开启打卡</el-button>
+            <el-button type="primary" size="small" plain @click="viewAttendance(row)">考勤记录</el-button>
+            <el-button type="info" size="small" plain @click="viewWeeks(row)">周次详情</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
     </el-card>
 
     <!-- 考勤记录弹窗 -->
-    <el-dialog v-model="showAttendance" title="📋 考勤记录" width="700px">
+    <el-dialog v-model="showAttendance" :title="'📋 考勤记录 — ' + attendanceTitle" width="700px">
       <el-empty v-if="attendanceRecords.length === 0" description="暂无签到记录" />
       <el-table v-else :data="attendanceRecords" stripe>
         <el-table-column prop="student_name" label="学生姓名" />
@@ -102,57 +111,77 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '../utils/request'
 
 const router = useRouter()
 
-// 课程列表
-const courses = ref<any[]>([])
-const activeCourse = ref<number | null>(null)
+interface Schedule {
+  id: number
+  course_id: number
+  class_id: number
+  course_name: string
+  class_name: string
+  weekday: number
+  start_date: string
+  total_weeks: number
+  start_time: string
+  end_time: string
+  location: string
+}
 
-// 排课 map：{ courseId: schedules[] }
-const scheduleMap = reactive<Record<number, any[]>>({})
-const loadingSchedules = reactive<Record<number, boolean>>({})
+const allSchedules = ref<Schedule[]>([])
+const todaySchedules = ref<Schedule[]>([])
 
-// 考勤弹窗
+// 今日星期标签
+const todayWeekday = new Date().getDay() || 7  // 1=Mon...7=Sun
+const weekdayLabels = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日']
+const todayLabel = weekdayLabels[todayWeekday]
+
+// 加载全部排课
+const fetchAllSchedules = async () => {
+  try {
+    const coursesRes = await request.get('/api/v1/courses')
+    const courses = coursesRes.data
+    const all: Schedule[] = []
+    for (const course of courses) {
+      const res = await request.get(`/api/v1/courses/${course.id}/schedules`)
+      for (const s of res.data) {
+        all.push({ ...s, course_name: s.course_name || course.name })
+      }
+    }
+    allSchedules.value = all
+    todaySchedules.value = all.filter(s => s.weekday === todayWeekday)
+  } catch {
+    ElMessage.error('获取排课数据失败')
+  }
+}
+
+// 考勤记录弹窗
 const showAttendance = ref(false)
 const attendanceRecords = ref<any[]>([])
+const attendanceTitle = ref('')
 
-// 周次弹窗
+const viewAttendance = async (schedule: Schedule) => {
+  attendanceTitle.value = `${schedule.course_name} - ${schedule.class_name}`
+  try {
+    const res = await request.get(`/api/v1/attendance/${schedule.id}`)
+    attendanceRecords.value = res.data
+    showAttendance.value = true
+  } catch {
+    ElMessage.error('获取考勤记录失败')
+  }
+}
+
+// 周次详情弹窗
 const showWeeks = ref(false)
 const weeksList = ref<any[]>([])
 const weeksLoading = ref(false)
 const weekScheduleTitle = ref('')
 
-// 加载课程列表
-const fetchCourses = async () => {
-  try {
-    const res = await request.get('/api/v1/courses')
-    courses.value = res.data
-  } catch {
-    ElMessage.error('获取课程列表失败')
-  }
-}
-
-// 当展开某个课程时，加载其排课
-watch(activeCourse, async (courseId) => {
-  if (courseId == null || scheduleMap[courseId]) return
-  loadingSchedules[courseId] = true
-  try {
-    const res = await request.get(`/api/v1/courses/${courseId}/schedules`)
-    scheduleMap[courseId] = res.data
-  } catch {
-    ElMessage.error('获取排课失败')
-  } finally {
-    loadingSchedules[courseId] = false
-  }
-})
-
-// 查看周次详情
-const viewWeeks = async (schedule: any) => {
+const viewWeeks = async (schedule: Schedule) => {
   weekScheduleTitle.value = `${schedule.course_name} - ${schedule.class_name}`
   weeksLoading.value = true
   showWeeks.value = true
@@ -166,33 +195,62 @@ const viewWeeks = async (schedule: any) => {
   }
 }
 
-// 跳转打卡页
-const goCheckIn = (schedule: any) => {
-  router.push({ path: '/check_in', query: { scheduleId: schedule.id, title: `${schedule.course_name} - ${schedule.class_name}` } })
-}
-
-// 查看考勤记录
-const viewAttendance = async (schedule: any) => {
-  try {
-    const res = await request.get(`/api/v1/attendance/${schedule.id}`)
-    attendanceRecords.value = res.data
-    showAttendance.value = true
-  } catch {
-    ElMessage.error('获取考勤记录失败')
-  }
+// 跳转打卡
+const goCheckIn = (schedule: Schedule) => {
+  router.push({
+    path: '/check_in',
+    query: { scheduleId: schedule.id, title: `${schedule.course_name} - ${schedule.class_name}` },
+  })
 }
 
 // 工具函数
-const weekdayText = (d: number) => ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'][d] || ''
+const weekdayText = (d: number) => weekdayLabels[d] || ''
 const statusText = (s: string) => ({ present: '已到', late: '迟到', absent: '缺勤' }[s] || s)
 const formatTime = (t: string) => t ? new Date(t).toLocaleString('zh-CN') : '-'
 
-fetchCourses()
+onMounted(() => fetchAllSchedules())
 </script>
 
 <style scoped>
 .my-courses-container { padding: 0; }
-.card-header { font-weight: bold; font-size: 16px; }
-.course-title { display: flex; align-items: center; gap: 12px; }
-.course-classes { color: #909399; font-size: 13px; }
+.card-header {
+  font-weight: bold;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 今日课程卡片 */
+.today-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.today-card {
+  flex: 1;
+  min-width: 300px;
+  max-width: 500px;
+}
+.today-card-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.today-card-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+.today-card-detail {
+  font-size: 13px;
+  color: #909399;
+  margin-top: 4px;
+}
+.today-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
 </style>

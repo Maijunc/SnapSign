@@ -23,7 +23,11 @@ request.interceptors.request.use((config) => {
 request.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status
+    const url = error.config?.url || ''
+    const isLoginRequest = typeof url === 'string' && url.includes('/api/v1/auth/login')
+
+    if (status === 401 && !isLoginRequest) {
       // Token 过期或无效，清除本地状态，跳转登录页
       localStorage.removeItem('token')
       localStorage.removeItem('role')

@@ -1,14 +1,15 @@
 # backend/app/routers/admin.py
 # 管理员端路由：用户管理 CRUD & 学生档案管理
 
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import StudentFeature, User
-from app.schemas import UserCreate, UserUpdate, UserOut
+from app.schemas import UserCreate, UserUpdate, UserOut, UserPageOut
 from app.auth import get_current_user, require_role, hash_password
 
 router = APIRouter(prefix="/api/v1", tags=["管理后台"])
@@ -24,6 +25,39 @@ async def list_users(
     _: User = Depends(require_role("admin")),
 ):
     return db.query(User).order_by(User.created_at.desc()).all()
+
+
+@router.get("/users/page", response_model=UserPageOut)
+async def list_users_page(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    keyword: Optional[str] = Query(None),
+    role: Optional[str] = Query(None),
+    is_active: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role("admin")),
+):
+    query = db.query(User)
+
+    if keyword and keyword.strip():
+        kw = f"%{keyword.strip()}%"
+        query = query.filter(or_(User.username.like(kw), User.real_name.like(kw)))
+
+    if role in ("student", "teacher", "admin"):
+        query = query.filter(User.role == role)
+
+    if is_active in (0, 1):
+        query = query.filter(User.is_active == is_active)
+
+    total = query.count()
+    items = (
+        query.order_by(User.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return UserPageOut(total=total, page=page, page_size=page_size, items=items)
 
 
 @router.post("/users", response_model=UserOut)

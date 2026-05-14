@@ -16,7 +16,8 @@ from app.models import User
 # ==========================================
 # 配置常量
 # ==========================================
-SECRET_KEY = "snapsign-secret-key-change-in-production"  # 生产环境务必替换并放入环境变量
+import os
+SECRET_KEY = os.getenv("SECRET_KEY", "snapsign-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480  # 8 小时，一个上课日足够
 

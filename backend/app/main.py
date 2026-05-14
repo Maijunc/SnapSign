@@ -87,12 +87,32 @@ def _seed_holidays():
         if db.query(Holiday).first():
             return
         year = date.today().year
+        holiday_seeds = {
+            2026: [
+                (1, 1, "元旦"), (1, 2, "元旦"), (1, 3, "元旦"),
+                (2, 15, "春节"), (2, 16, "春节"), (2, 17, "春节"),
+                (2, 18, "春节"), (2, 19, "春节"), (2, 20, "春节"),
+                (2, 21, "春节"), (2, 22, "春节"), (2, 23, "春节"),
+                (4, 4, "清明节"), (4, 5, "清明节"), (4, 6, "清明节"),
+                (5, 1, "劳动节"), (5, 2, "劳动节"), (5, 3, "劳动节"),
+                (5, 4, "劳动节"), (5, 5, "劳动节"),
+                (6, 19, "端午节"), (6, 20, "端午节"), (6, 21, "端午节"),
+                (9, 25, "中秋节"), (9, 26, "中秋节"), (9, 27, "中秋节"),
+                (10, 1, "国庆节"), (10, 2, "国庆节"), (10, 3, "国庆节"),
+                (10, 4, "国庆节"), (10, 5, "国庆节"), (10, 6, "国庆节"),
+                (10, 7, "国庆节"),
+            ],
+        }
+        seed_items = holiday_seeds.get(year, [
+            (1, 1, "元旦"),
+            (5, 1, "劳动节"),
+            (10, 1, "国庆节"),
+            (10, 2, "国庆节"),
+            (10, 3, "国庆节"),
+        ])
         db.add_all([
-            Holiday(holiday_date=date(year, 1, 1), name="元旦"),
-            Holiday(holiday_date=date(year, 5, 1), name="劳动节"),
-            Holiday(holiday_date=date(year, 10, 1), name="国庆节"),
-            Holiday(holiday_date=date(year, 10, 2), name="国庆节"),
-            Holiday(holiday_date=date(year, 10, 3), name="国庆节"),
+            Holiday(holiday_date=date(year, month, day), name=name)
+            for month, day, name in seed_items
         ])
         db.commit()
         print("🎉 种子节假日数据已写入！")

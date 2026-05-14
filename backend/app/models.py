@@ -31,6 +31,17 @@ class_students = Table(
 
 
 # ==========================================
+# 多对多中间表：排课 ↔ 班级
+# ==========================================
+schedule_classes = Table(
+    "schedule_classes",
+    Base.metadata,
+    Column("schedule_id", Integer, ForeignKey("course_schedules.id"), primary_key=True),
+    Column("class_id", Integer, ForeignKey("classes.id"), primary_key=True),
+)
+
+
+# ==========================================
 # 用户与权限
 # ==========================================
 
@@ -69,6 +80,7 @@ class Class(Base):
 
     courses = relationship("Course", secondary=course_classes, back_populates="classes")
     schedules = relationship("CourseSchedule", back_populates="class_")
+    shared_schedules = relationship("CourseSchedule", secondary=schedule_classes, back_populates="classes")
     students = relationship("StudentFeature", secondary=class_students, back_populates="classes")
 
 
@@ -95,7 +107,7 @@ class Course(Base):
 # ==========================================
 
 class CourseSchedule(Base):
-    """排课表"""
+    """排课表，可关联一个或多个班级"""
     __tablename__ = "course_schedules"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -111,7 +123,37 @@ class CourseSchedule(Base):
 
     course = relationship("Course", back_populates="schedules")
     class_ = relationship("Class", back_populates="schedules")
+    classes = relationship("Class", secondary=schedule_classes, back_populates="shared_schedules")
     attendance_records = relationship("AttendanceRecord", back_populates="schedule")
+
+    @property
+    def resolved_classes(self):
+        return self.classes or ([self.class_] if self.class_ else [])
+
+    @property
+    def resolved_class_ids(self):
+        return [cls.id for cls in self.resolved_classes]
+
+    @property
+    def resolved_class_names(self):
+        return [cls.name for cls in self.resolved_classes]
+
+    @property
+    def resolved_class_name(self):
+        names = self.resolved_class_names
+        return " / ".join(names) if names else None
+
+    @property
+    def resolved_students(self):
+        seen = set()
+        students = []
+        for cls in self.resolved_classes:
+            for student in cls.students:
+                if student.id in seen:
+                    continue
+                seen.add(student.id)
+                students.append(student)
+        return students
 
 
 # ==========================================
@@ -169,6 +211,57 @@ class Holiday(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     holiday_date = Column(Date, unique=True, nullable=False, index=True, comment="放假日期")
     name = Column(String(50), nullable=False, comment="节假日名称，如 国庆节")
+
+
+# ==========================================
+# 申诉记录
+# ==========================================
+
+class Appeal(Base):
+    """学生考勤申诉表"""
+    __tablename__ = "appeals"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    attendance_id = Column(Integer, ForeignKey("attendance_records.id"), nullable=False, comment="关联考勤记录")
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, comment="申诉学生")
+    reason = Column(String(500), nullable=False, comment="申诉理由")
+    status = Column(
+        Enum("pending", "approved", "rejected", name="appeal_status"),
+        nullable=False,
+        default="pending",
+        comment="审批状态",
+    )
+    reply = Column(String(500), nullable=True, comment="教师审批回复")
+    created_at = Column(DateTime, default=func.now(), comment="提交时间")
+
+    attendance_record = relationship("AttendanceRecord")
+    user = relationship("User")
+
+
+# ==========================================
+# 请假记录
+# ==========================================
+
+class LeaveRequest(Base):
+    """学生请假表（提前请假，区别于事后申诉）"""
+    __tablename__ = "leave_requests"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, comment="请假学生")
+    schedule_id = Column(Integer, ForeignKey("course_schedules.id"), nullable=False, comment="关联排课")
+    leave_date = Column(Date, nullable=False, comment="请假日期")
+    reason = Column(String(500), nullable=False, comment="请假理由")
+    status = Column(
+        Enum("pending", "approved", "rejected", name="leave_status"),
+        nullable=False,
+        default="pending",
+        comment="审批状态",
+    )
+    reply = Column(String(500), nullable=True, comment="教师审批回复")
+    created_at = Column(DateTime, default=func.now(), comment="提交时间")
+
+    schedule = relationship("CourseSchedule")
+    user = relationship("User")
 
 
 # ==========================================

@@ -6,7 +6,7 @@ import Dashboard from '../views/Dashboard.vue'
 const roleHomePage: Record<string, string> = {
   admin: '/',
   teacher: '/calendar',
-  student: '/calendar',
+  student: '/student-dashboard',
 }
 
 const router = createRouter({
@@ -28,19 +28,37 @@ const router = createRouter({
       path: '/register',
       name: 'FaceRegister',
       component: () => import('../views/FaceRegistration.vue'),
-      meta: { roles: ['student', 'teacher', 'admin'] },
+      meta: { roles: ['teacher', 'admin'] },
+    },
+    {
+      path: '/my-face',
+      name: 'MyFaceRegister',
+      component: () => import('../views/MyFaceRegistration.vue'),
+      meta: { roles: ['student'] },
     },
     {
       path: '/check_in',
       name: 'AttendanceCheck',
       component: () => import('../views/AttendanceCheck.vue'),
-      meta: { roles: ['student', 'teacher'] },
+      meta: { roles: ['teacher'] },
     },
     {
       path: '/management',
       name: 'StudentManagement',
       component: () => import('../views/StudentManagement.vue'),
-      meta: { roles: ['teacher', 'admin'] },
+      meta: { roles: ['admin'] },
+    },
+    {
+      path: '/class-students',
+      name: 'ClassStudents',
+      component: () => import('../views/ClassStudents.vue'),
+      meta: { roles: ['teacher'] },
+    },
+    {
+      path: '/approval',
+      name: 'ApprovalManagement',
+      component: () => import('../views/ApprovalManagement.vue'),
+      meta: { roles: ['teacher'] },
     },
     {
       path: '/courses',
@@ -49,9 +67,27 @@ const router = createRouter({
       meta: { roles: ['teacher'] },
     },
     {
+      path: '/student-courses',
+      name: 'StudentCourses',
+      component: () => import('../views/StudentCourses.vue'),
+      meta: { roles: ['student'] },
+    },
+    {
       path: '/my-attendance',
       name: 'MyAttendance',
       component: () => import('../views/MyAttendance.vue'),
+      meta: { roles: ['student'] },
+    },
+    {
+      path: '/leave-request',
+      name: 'LeaveRequest',
+      component: () => import('../views/LeaveRequest.vue'),
+      meta: { roles: ['student'] },
+    },
+    {
+      path: '/student-dashboard',
+      name: 'StudentDashboard',
+      component: () => import('../views/StudentDashboard.vue'),
       meta: { roles: ['student'] },
     },
     {

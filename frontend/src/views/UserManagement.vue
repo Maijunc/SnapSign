@@ -8,8 +8,35 @@
         </div>
       </template>
 
+      <div class="toolbar">
+        <el-input
+          v-model="filters.keyword"
+          placeholder="搜索用户名/真实姓名"
+          clearable
+          style="width: 240px"
+          @keyup.enter="fetchUsers(true)"
+        />
+        <el-select v-model="filters.role" placeholder="角色筛选" clearable style="width: 140px">
+          <el-option label="学生" value="student" />
+          <el-option label="教师" value="teacher" />
+          <el-option label="管理员" value="admin" />
+        </el-select>
+        <el-select v-model="filters.is_active" placeholder="状态筛选" clearable style="width: 140px">
+          <el-option label="启用" value="1" />
+          <el-option label="禁用" value="0" />
+        </el-select>
+        <el-button type="primary" @click="fetchUsers(true)">查询</el-button>
+        <el-button @click="resetFilters">重置</el-button>
+      </div>
+
       <el-table :data="userList" v-loading="isLoading" stripe border style="width: 100%">
-        <el-table-column type="index" label="序号" width="70" align="center" />
+        <el-table-column
+          type="index"
+          label="序号"
+          width="70"
+          align="center"
+          :index="(index: number) => (pagination.page - 1) * pagination.page_size + index + 1"
+        />
         <el-table-column prop="username" label="用户名" width="150" />
         <el-table-column prop="real_name" label="真实姓名" width="150" />
         <el-table-column label="角色" width="120" align="center">
@@ -46,6 +73,19 @@
           </template>
         </el-table-column>
       </el-table>
+
+      <div class="pagination-wrap">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.page_size"
+          :total="pagination.total"
+          :page-sizes="[10, 20, 50, 100]"
+          background
+          layout="total, sizes, prev, pager, next, jumper"
+          @current-change="fetchUsers()"
+          @size-change="onPageSizeChange"
+        />
+      </div>
     </el-card>
 
     <!-- 新增 / 编辑 弹窗 -->
@@ -91,6 +131,18 @@ const isEdit = ref(false)
 const editingId = ref<number | null>(null)
 const submitting = ref(false)
 
+const filters = reactive({
+  keyword: '',
+  role: '',
+  is_active: '',
+})
+
+const pagination = reactive({
+  page: 1,
+  page_size: 10,
+  total: 0,
+})
+
 const formData = reactive({
   username: '',
   password: '',
@@ -99,16 +151,38 @@ const formData = reactive({
   is_active: 1,
 })
 
-const fetchUsers = async () => {
+const fetchUsers = async (resetPage = false) => {
+  if (resetPage) pagination.page = 1
   isLoading.value = true
   try {
-    const res = await request.get('/api/v1/users')
-    userList.value = res.data
+    const res = await request.get('/api/v1/users/page', {
+      params: {
+        page: pagination.page,
+        page_size: pagination.page_size,
+        keyword: filters.keyword || undefined,
+        role: filters.role || undefined,
+        is_active: filters.is_active === '' ? undefined : Number(filters.is_active),
+      },
+    })
+    userList.value = res.data.items || []
+    pagination.total = res.data.total || 0
   } catch {
     ElMessage.error('获取用户列表失败')
   } finally {
     isLoading.value = false
   }
+}
+
+const onPageSizeChange = () => {
+  pagination.page = 1
+  fetchUsers()
+}
+
+const resetFilters = () => {
+  filters.keyword = ''
+  filters.role = ''
+  filters.is_active = ''
+  fetchUsers(true)
 }
 
 const openCreateDialog = () => {
@@ -187,5 +261,19 @@ onMounted(() => fetchUsers())
   align-items: center;
   font-weight: bold;
   font-size: 16px;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.pagination-wrap {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

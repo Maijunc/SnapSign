@@ -1,13 +1,13 @@
 # backend/app/routers/auth.py
-# 认证路由：登录 / 获取当前用户信息
+# 认证路由：登录 / 获取当前用户信息 / 密码修改
 
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import User
-from app.schemas import LoginRequest, TokenResponse
-from app.auth import verify_password, create_access_token, get_current_user
+from app.schemas import LoginRequest, TokenResponse, PasswordChange
+from app.auth import verify_password, create_access_token, get_current_user, hash_password
 
 router = APIRouter(prefix="/api/v1/auth", tags=["认证"])
 
@@ -38,3 +38,19 @@ async def get_me(current_user: User = Depends(get_current_user)):
         "real_name": current_user.real_name,
         "role": current_user.role,
     }
+
+
+@router.put("/password")
+async def change_password(
+    data: PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """修改当前用户密码"""
+    if not verify_password(data.old_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="原密码错误")
+    if len(data.new_password) < 6:
+        raise HTTPException(status_code=400, detail="新密码长度不能少于6位")
+    current_user.hashed_password = hash_password(data.new_password)
+    db.commit()
+    return {"status": "success", "message": "密码修改成功"}
