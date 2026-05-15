@@ -41,10 +41,6 @@
           <!-- 已录入状态 -->
           <template v-if="faceRegistered">
             <el-result icon="success" title="人脸已录入" sub-title="你的人脸特征已成功注册，可正常参与考勤签到" />
-            <div class="registered-photo" v-if="registeredImage">
-              <p style="color: #606266; font-size: 14px; margin-bottom: 8px; text-align: center;">已录入的照片：</p>
-              <img :src="registeredImage" class="preview-img" />
-            </div>
             <el-button type="warning" style="width: 100%; margin-top: 16px;" @click="reRegister">重新录入</el-button>
           </template>
 
@@ -87,7 +83,6 @@ const isCameraReady = ref(false)
 const isSubmitting = ref(false)
 const capturedImage = ref<string | null>(null)
 const faceRegistered = ref(false)
-const registeredImage = ref<string | null>(null)
 
 // 学生信息（从登录态自动获取）
 const studentId = ref('')
@@ -159,9 +154,6 @@ const captureAndSubmit = async () => {
     if (res.data.status === 'success') {
       ElMessage.success('人脸注册成功！')
       faceRegistered.value = true
-      registeredImage.value = capturedImage.value
-      // 缓存照片到本地
-      if (capturedImage.value) localStorage.setItem('facePhoto', capturedImage.value)
     }
   } catch (error: any) {
     ElMessage.error(error.response?.data?.detail || '注册失败')
@@ -178,10 +170,6 @@ const reRegister = async () => {
 onMounted(async () => {
   await fetchMyInfo()
   await checkFaceStatus()
-  // 加载缓存的已注册照片
-  if (faceRegistered.value) {
-    registeredImage.value = localStorage.getItem('facePhoto')
-  }
 })
 
 onBeforeUnmount(() => stopCamera())
@@ -238,11 +226,4 @@ onBeforeUnmount(() => stopCamera())
 }
 .preview-title { color: #606266; font-size: 14px; margin-bottom: 8px; }
 .preview-img { max-width: 100%; border-radius: 4px; }
-.registered-photo {
-  text-align: center;
-  border: 1px solid #e4e7ed;
-  padding: 12px;
-  border-radius: 8px;
-  background: #fafafa;
-}
 </style>
